@@ -6,7 +6,7 @@ from storage import LinkUnavailable, transaction
 
 def resume_release(connection, custody: CustodyRecord, *, issue_release=release_frame) -> ReleaseResult:
     recording_id = custody.recording_id
-    number = custody.frame.number
+    number = custody.number
     expected = ReleaseResult(recording_id, number, custody.position)
     with transaction(connection):
         head = read_head(connection, recording_id)

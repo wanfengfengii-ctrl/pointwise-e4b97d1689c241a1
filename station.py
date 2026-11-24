@@ -3,6 +3,7 @@ from archive.store import ArchiveStore as ArchiveStore
 from archive.store import initialize_archive as initialize_archive
 from edge.capture import AdvanceResult as AdvanceResult
 from edge.capture import advance as advance
+from edge.capture import advance_with_archive as advance_with_archive
 from edge.custody import initialize_custody
 from edge.delivery import DeliveryReport as DeliveryReport
 from edge.delivery import deliver as deliver

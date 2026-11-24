@@ -27,6 +27,12 @@ python3 -B check_project.py
 python3 -B demo.py
 ```
 
+`demo.py` 依次运行普通 A/B 回放与 `ARCHIVE_SPILL.md` 的代存续采演示。单独运行代存演示：
+
+```sh
+python3 -B spill_demo.py
+```
+
 如需在项目内保留演示状态，可运行 `python3 -B demo.py --state-dir .demo-state`。重复初始化补齐数据库结构并保留已有数据。相同录制及登记复用原进度，已成果窗复用原成果，其他录制及合法追加登记独立保留。相同标识对应不同录制或窗口参数时报冲突。
 
 ## 公开 Python 接口
@@ -40,6 +46,7 @@ python3 -B demo.py
 | `open_recording(edge, recording_id, frames)` | 固定录制定义，返回 `Recording`。重投原定义保留设备头和现有进度。 |
 | `register(edge, recording_id, window_id, left, right)` | 返回固定 `WindowRegistration`，其中 `interval.expected` 是窗口应领原号元组。 |
 | `advance(edge, recording_id, issue_release=...)` | 补认先前未确认的释放，再耐久接管并放行下一帧。`AdvanceResult.at_end` 表示录制尾。默认使用确定性设备端口，可用 `ReleasePort` 指定一次未生效或丢回包的中断。 |
+| `advance_with_archive(edge, archive, recording_id, issue_release=...)` | 普通采录入口；仅当本地正文明确拒写时才把原帧耐久代存到归档，再按正式接管登记义务并放行。代存提交或核实失败报 `LinkUnavailable`，源帧保持在读头待放行。 |
 | `deliver(edge, archive, recording_id, limit=None, intake=...)` | 补送边缘待交付项。报告逐项 `accepted`、剩余数 `remaining` 和归档写入或链路中断信息 `blocked`。省略限制时尝试全部待项。 |
 | `finalize(archive, recording_id, window_id)` | 签发齐备窗口或归还原来已签的 `PublishedResult`。 |
 | `get_result(archive, result_id)` | 按正整数成果号读取固定正文及回执。 |
@@ -51,8 +58,16 @@ python3 -B demo.py
 
 设备释放在接管提交后的独立事务推进，并留下精确到原帧的事实。链路中断报 `LinkUnavailable`，可原样续办。归档接纳提交后才返回确认。拒写、失配或未收到确认的交付可重投。归档的每个窗口独立保存接纳关系，发布正文和成功回执要么同时提交，要么同时回滚。归档接纳可由 `archive.intake.accept_delivery` 调用，传入冻结登记及原帧以按窗接纳。`archive.completeness.inspect_window_progress` 可在归档读视图内查询实测明细和缺号。
 
+## 原帧代存
+
+`advance_with_archive` 只在本地正文写入抛出 `edge.custody.LocalBodyUnavailable` 时改走归档代存，普通路径完全不变。代存表 `archive.spill` 以录制号、仪器原号、源位置、整数读值和出处耐久保存原帧；提交后必须经独立读连接核实，否则报 `LinkUnavailable` 并保持源帧待放行。只丢回复时链路恢复后重投会查回同一原件，不会重复写入。
+
+代存期间窗口保持原齐备状态，登记照常受理。边缘正式接管提交把当时覆盖本帧的所有已受理窗固定进 `spilled_custody_windows` 并推进登记前沿，随后才具备放行资格。接管提交失败时放行资格与逐窗义务保持原状。交付时 `deliver` 从代存读回原值、出处和位置，归档在 `verify_spilled_original` 中核对同一录制、原号、源位置、原值、出处及正式接管授权的窗口，再按原接口逐窗实收并结清对应义务。同一正式材料重复补送沿用原确认语义。`finalize`、`get_result`、`export_result` 与旧成果口径一致。
+
 ## 手算样例与回归
 
 `examples/recording.json` 给出原号 10、11、12，读值为 4、9、6。A 领 10、11，峰峰值为 5。B 领 11、12，峰峰值为 3。两件中 11 的出处都是 `recorder/31/11`，仪器成功释放共三次。`examples/expected.json` 保存逐项对照。演示在帧 11 放行后丢失回包并重开边缘，先签 A，再重开归档签 B，经真实领取及导出核对后输出场景结果。
 
-回归另覆盖登记重投与截止、接管失败时保留读头、归档拒写时采到录制尾、补送部分提交后重开、尾帧先到、非法或冲突证据、零及大整数计量、数字原号导出顺序，以及真实提交失败后 B 先签和 A 原号续办。
+`spill_demo.py` 复现代存样例：11 的本地正文拒写、首次代存被拒绝，随后代存提交成功但回包丢失，此时读头仍停在 11、A 缺 11、边缘仍可登记 C。两库重开后继续办理，11 只释放一次，12 照常采录。逐窗实收并停源重开归档后，A、B、C 分别领到 5、3、0。
+
+回归另覆盖登记重投与截止、接管失败时保留读头、归档拒写时采到录制尾、补送部分提交后重开、尾帧先到、非法或冲突证据、零及大整数计量、数字原号导出顺序，以及真实提交失败后 B 先签和 A 原号续办；代存回归见 `tests/test_spill.py`。

@@ -10,6 +10,7 @@ from station import (
     ArchiveStore, Frame, ReleasePort, advance, deliver, export_result, finalize,
     get_result, initialize_edge, open_recording, register,
 )
+from spill_demo import run_demo as spill_run_demo
 from storage import LinkUnavailable
 
 
@@ -114,9 +115,12 @@ def main():
     if args.state_dir is not None:
         args.state_dir.mkdir(parents=True, exist_ok=True)
         run_demo(args.state_dir)
+        spill_run_demo(args.state_dir / 'spill')
     else:
         with tempfile.TemporaryDirectory() as directory:
             run_demo(Path(directory))
+        with tempfile.TemporaryDirectory() as directory:
+            spill_run_demo(Path(directory))
 
 
 if __name__ == '__main__':

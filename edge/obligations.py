@@ -19,10 +19,44 @@ def initialize_obligations(connection) -> None:
             number TEXT NOT NULL,
             accepted INTEGER NOT NULL DEFAULT 0 CHECK (accepted IN (0, 1)),
             PRIMARY KEY (recording_id, window_id, number),
-            FOREIGN KEY (recording_id, window_id) REFERENCES registrations(recording_id, window_id),
-            FOREIGN KEY (recording_id, number) REFERENCES custody(recording_id, number)
+            FOREIGN KEY (recording_id, window_id) REFERENCES registrations(recording_id, window_id)
         )
     ''')
+    _drop_legacy_custody_foreign_key(connection)
+    connection.execute('''
+        CREATE INDEX IF NOT EXISTS pending_delivery_by_recording
+        ON delivery_obligations(recording_id, number, window_id) WHERE accepted = 0
+    ''')
+
+
+def _drop_legacy_custody_foreign_key(connection) -> None:
+    """Obligations may now point at a spilled original, not only a local body.
+
+    A database created by the ordinary-only code has a foreign key from
+    obligations to the local ``custody`` table; rebuild it so a spilled frame's
+    duties can be recorded without a local body row.
+    """
+    row = connection.execute('''
+        SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'delivery_obligations'
+    ''').fetchone()
+    if row is None or row['sql'] is None or 'REFERENCES custody' not in row['sql']:
+        return
+    connection.execute('ALTER TABLE delivery_obligations RENAME TO delivery_obligations_legacy')
+    connection.execute('''
+        CREATE TABLE delivery_obligations (
+            recording_id TEXT NOT NULL,
+            window_id TEXT NOT NULL,
+            number TEXT NOT NULL,
+            accepted INTEGER NOT NULL DEFAULT 0 CHECK (accepted IN (0, 1)),
+            PRIMARY KEY (recording_id, window_id, number),
+            FOREIGN KEY (recording_id, window_id) REFERENCES registrations(recording_id, window_id)
+        )
+    ''')
+    connection.execute('''
+        INSERT INTO delivery_obligations(recording_id, window_id, number, accepted)
+        SELECT recording_id, window_id, number, accepted FROM delivery_obligations_legacy
+    ''')
+    connection.execute('DROP TABLE delivery_obligations_legacy')
     connection.execute('''
         CREATE INDEX IF NOT EXISTS pending_delivery_by_recording
         ON delivery_obligations(recording_id, number, window_id) WHERE accepted = 0
@@ -38,12 +72,14 @@ def add_obligations(connection, recording_id: str, frame_number: int,
 
 def list_pending_obligations(connection, recording_id: str) -> tuple[DeliveryObligation, ...]:
     rows = connection.execute('''
-        SELECT o.window_id, o.number, r.left_number, r.right_number, r.expected
+        SELECT o.window_id, o.number, r.left_number, r.right_number, r.expected,
+               COALESCE(c.position, s.position) AS position
         FROM delivery_obligations AS o
         JOIN registrations AS r USING (recording_id, window_id)
-        JOIN custody AS c ON c.recording_id = o.recording_id AND c.number = o.number
-        WHERE o.recording_id = ? AND o.accepted = 0
-        ORDER BY c.position, o.window_id
+        LEFT JOIN custody AS c ON c.recording_id = o.recording_id AND c.number = o.number
+        LEFT JOIN spilled_custody AS s ON s.recording_id = o.recording_id AND s.number = o.number
+        WHERE o.recording_id = ? AND o.accepted = 0 AND COALESCE(c.position, s.position) IS NOT NULL
+        ORDER BY position, o.window_id
     ''', (recording_id,))
     obligations = []
     for row in rows:
