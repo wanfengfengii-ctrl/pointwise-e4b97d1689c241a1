@@ -1,0 +1,18 @@
+{
+  "windows": {
+    "A": {
+      "numbers": [10, 11],
+      "readings": [4, 9],
+      "origins": ["recorder/31/10", "recorder/31/11"],
+      "peak_to_peak": 5
+    },
+    "B": {
+      "numbers": [11, 12],
+      "readings": [9, 6],
+      "origins": ["recorder/31/11", "recorder/31/12"],
+      "peak_to_peak": 3
+    }
+  },
+  "shared_origin": "recorder/31/11",
+  "successful_releases": 3
+}

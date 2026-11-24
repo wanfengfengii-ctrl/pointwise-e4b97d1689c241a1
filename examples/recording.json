@@ -1,0 +1,13 @@
+{
+  "recording_id": "shift-31",
+  "frames": [
+    {"number": 10, "value": 4, "origin": "recorder/31/10"},
+    {"number": 11, "value": 9, "origin": "recorder/31/11"},
+    {"number": 12, "value": 6, "origin": "recorder/31/12"}
+  ],
+  "windows": [
+    {"window_id": "A", "left": 10, "right": 11},
+    {"window_id": "B", "left": 11, "right": 12}
+  ],
+  "lost_release_reply": 11
+}
